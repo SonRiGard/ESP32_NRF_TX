@@ -29,8 +29,12 @@ uint8_t address[][6] = {"1Node", "2Node"};
 bool radioNumber = 0; // 0 uses address[0] to transmit, 1 uses address[1] to transmit
 
 float payload_TX[5]={1,2,3,4,5};
+float payload_RX[5];
 void NRF_Send_Data (void);
 void TX_RF_Init(void);
+void NRF_Get_Data(void);
+void MODE_RX2TX(void);
+void MODE_TX2RX(void);
 void setup()
 {
   Serial.begin(115200);
@@ -40,16 +44,67 @@ void setup()
 
 void loop()
 {
+  //MODE_RX2TX();
   NRF_Send_Data();
+  //MODE_TX2RX();
+  NRF_Get_Data();
 } // loop
+void TX_RF_Init(void){
+ if (!radio.begin()) {
+    Serial.println(F("radio hardware is not responding!!"));
+    while (1) {}  // hold in infinite loop
+  }
+  radio.setChannel(23); 
+  radio.setPALevel(RF24_PA_LOW);  // RF24_PA_MAX is default.
+  radio.setPayloadSize(sizeof(payload_RX));  // float datatype occupies 4 bytes
+  // set the TX address of the RX node into the TX pipe
+  radio.openWritingPipe(address[radioNumber]);  // always uses pipe 0
+  // set the RX address of the TX node into a RX pipe
+  radio.openReadingPipe(1, address[!radioNumber]);  // using pipe 1
+  // additional setup specific to the node's role
+}
 
-void NRF_Send_Data (void){
-  unsigned long start_timer = micros();               // start the timer
+void NRF_Get_Data(void)
+{
+  uint8_t pipe;
+  if (radio.available(&pipe))
+  { // is there a payload? get the pipe number that recieved it
+    // if (pipe==1){
+
+    uint8_t bytes = radio.getPayloadSize(); // get the size of the payload
+    radio.read(&payload_RX, bytes);         // fetch payload from FIFO
+    Serial.print(F("Received "));
+    Serial.print(bytes); // print the size of the payload
+    Serial.print(F(" bytes on pipe "));
+    Serial.print(pipe); // print the pipe number
+    Serial.print(F(": "));
+    MODE_RX2TX();
+    Serial.print(millis());
+    Serial.print(",");
+    Serial.print(payload_RX[0]);
+    Serial.print(",");
+    Serial.print(payload_RX[1]);
+    Serial.print(",");
+    Serial.print(payload_RX[2]);
+    Serial.print(",");
+    Serial.print(payload_RX[3]);
+    Serial.print(",");
+    Serial.print(payload_RX[4]);
+    Serial.println();
+    // }
+  }
+  // else Serial.println("No signal");
+}
+
+void NRF_Send_Data(void)
+{
+  unsigned long start_timer = micros();                       // start the timer
   bool report = radio.write(&payload_TX, sizeof(payload_TX)); // transmit & save the report
-  unsigned long end_timer = micros();                 // end the timer
+  unsigned long end_timer = micros();                         // end the timer
 
   if (report)
   {
+    MODE_TX2RX();
     Serial.print(F("Transmission successful! ")); // payload was delivered
     Serial.print(F("Time to transmit = "));
     Serial.print(end_timer - start_timer); // print the timer result
@@ -62,19 +117,15 @@ void NRF_Send_Data (void){
   }
 }
 
-void TX_RF_Init(void){
-    if (!radio.begin())
-  {
-    Serial.println(F("radio hardware is not responding!!"));
-    while (1)
-    {
-    } // hold in infinite loop
-  }
-  radio.setChannel(23); 
-  radio.setPALevel(RF24_PA_LOW);                   // RF24_PA_MAX is default.
-  radio.setPayloadSize(20);                        // float datatype occupies 4 bytes
-  radio.openWritingPipe(address[radioNumber]);     // always uses pipe 0
-  radio.openReadingPipe(1, address[!radioNumber]); // using pipe 1
-  // TX mode
-  radio.stopListening(); // put radio in TX mode
+void MODE_RX2TX(void)
+{
+  radio.stopListening(); // put radio in RX mode
+  //delay(1);
+}
+
+
+void MODE_TX2RX(void)
+{
+  radio.startListening(); // put radio in RX mode
+  //delay(1);
 }
